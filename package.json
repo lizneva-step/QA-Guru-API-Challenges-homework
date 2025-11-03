@@ -1,19 +1,36 @@
 {
-  "name": "qa-guru-api-challenges-homework",
+  "name": "QA-Guru-API-Challenges-homework",
   "version": "1.0.0",
   "description": "API tests for QA Guru course",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "mocha tests/**/*.js --timeout 10000",
     "test:watch": "mocha tests/**/*.js --watch"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lizneva-step/QA-Guru-API-Challenges-homework.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lizneva-step/QA-Guru-API-Challenges-homework/issues"
+  },
+  "homepage": "https://github.com/lizneva-step/QA-Guru-API-Challenges-homework#readme",
   "dependencies": {
-    "axios": "^1.6.0",
-    "chai": "^4.3.7",
-    "chai-http": "^4.3.0"
+    "@faker-js/faker": "^10.1.0",
+    "allure-playwright": "^3.4.2",
+    "axios": "^1.13.1",
+    "config": "^4.1.1",
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "mocha": "^10.2.0",
+    "@playwright/test": "^1.56.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.5",
     "nyc": "^15.1.0"
   }
 }
