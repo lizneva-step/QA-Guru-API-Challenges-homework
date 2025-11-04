@@ -47,6 +47,18 @@ withMaxLengthDescription() {
   return this;
 }
 
+withExactMaxLengthDescription() {
+    this.data.description = "A".repeat(5000); // 5000 
+    return this;
+  }
+
+withMinimalUpdateData() {
+    this.data = {
+      title: "updated title"
+    };
+    return this;
+  }
+
   generate() {
     const result = { ...this.data };
     this.reset();
