@@ -4,16 +4,19 @@ import { TodosService } from "../src/todos.service.js";
 import { toDoBuilder } from "../src/builders/builders.todo.js";
 import { faker } from "@faker-js/faker";
 
-let token;
 
-// 01 POST /challenger (201) получить токен
+
+
 test.describe("Challenge API", () => {
+  let token;
+  // 01 POST /challenger (201) получить токен
   test.beforeAll(async ({ request }, testInfo) => {
     let response = await request.post(`${testInfo.project.use.baseURL}/challenger`);
     expect(response.status()).toBe(201);
     const headers = response.headers();
-    console.log(`${testInfo.project.use.baseURL}${headers.location}`);
-    token = headers["X-CHALLENGER"];
+    token = headers["x-challenger"];
+    //console.log ("это токен", token)
+    console.log(`https://apichallenges.herokuapp.com/gui/challenges/${token}`);
   });
 
   test("02 GET /challenges (200) - получить список challenge задач", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
@@ -56,6 +59,49 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
   });
 
   test("07 GET /todos (200) ?filter - получить список выполненных задач", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
+    // Сначала получаем все задачи
+    let allResponse = await request.get(`${testInfo.project.use.baseURL}/todos`, {
+      headers: {
+        "X-CHALLENGER": token,
+      },
+    });
+    let allBody = await allResponse.json();
+    expect(allResponse.status()).toBe(200);
+    
+    // Создаем выполненную задачу, если их нет
+    if (allBody.todos.filter(todo => todo.doneStatus === true).length === 0) {
+      const createTodo = new toDoBuilder()
+        .addTitle("Test done task")
+        .addDoneStatus(true)
+        .addDescription("Test description")
+        .generate();
+
+      await request.post(`${testInfo.project.use.baseURL}/todos`, {
+        headers: {
+          "X-CHALLENGER": token,
+          "Content-Type": "application/json",
+        },
+        data: createTodo,
+      });
+    }
+    
+    // Получаем все задачи снова после создания
+    let allResponse2 = await request.get(`${testInfo.project.use.baseURL}/todos`, {
+      headers: {
+        "X-CHALLENGER": token,
+      },
+    });
+    let allBody2 = await allResponse2.json();
+    expect(allResponse2.status()).toBe(200);
+    
+    // Проверяем, что есть как выполненные, так и невыполненные задачи
+    const doneTodos = allBody2.todos.filter(todo => todo.doneStatus === true);
+    const notDoneTodos = allBody2.todos.filter(todo => todo.doneStatus === false);
+    
+    expect(doneTodos.length).toBeGreaterThan(0);
+    expect(notDoneTodos.length).toBeGreaterThan(0);
+    
+    // Теперь получаем только выполненные задачи с фильтром
     let response = await request.get(`${testInfo.project.use.baseURL}/todos?doneStatus=true`, {
       headers: {
         "X-CHALLENGER": token,
@@ -63,7 +109,12 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
     });
     let body = await response.json();
     expect(response.status()).toBe(200);
-    expect(body.todos.doneStatus).toBeUndefined();
+    
+    // Проверяем, что все задачи в ответе являются выполненными
+    expect(body.todos.every(todo => todo.doneStatus === true)).toBe(true);
+    
+    // Проверяем, что количество выполненных задач не превышает общее количество задач
+    expect(body.todos.length).toBeLessThanOrEqual(allBody2.todos.length);
   });
 
   test("09 POST /todos (201) - создать новую задачу", { tag: '@API @POST @functional' }, async ({ request }, testInfo) => {
@@ -97,11 +148,7 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
   });
 
   test("10 POST /todos (400) - fail validation on doneStatus field", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
-  
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
-  
+    
   // Подготавливаем данные с некорректным doneStatus
   const invalidTodo = {
     title: "create new todo",
@@ -128,10 +175,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 });
 
   test("11 POST /todos (400) - title too long", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
-    
-    const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-    expect(responseToken.status()).toBe(201);
-    const token = responseToken.headers()['x-challenger'];
     
     // Используем builder для создания задачи с слишком длинным заголовком
     const createTodo = new toDoBuilder()
@@ -160,10 +203,7 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 
   test("12 POST /todos (400) - description too long", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
     
-    const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-    expect(responseToken.status()).toBe(201);
-    const token = responseToken.headers()['x-challenger'];
-    
+   
     // Используем builder для создания задачи с слишком длинным описанием
     const createTodo = new toDoBuilder()
       .addTitle("this title is fine")
@@ -190,10 +230,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
   });
 
   test("13 POST /todos (201) - max out content", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
-  
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Используем builder для создания задачи с максимальной длиной
   const createTodo = new toDoBuilder()
@@ -227,10 +263,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 
   test("14 POST /todos (413) - content too long", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
   
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
-  
   // Используем builder для создания задачи с очень длинным описанием
   const createTodo = new toDoBuilder()
     .addTitle("this title is valid.")
@@ -258,10 +290,7 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 
   test("15 POST /todos (400) - extra field", { tag: '@API @POST @validation' }, async ({ request }, testinfo) => {
     
-    const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-    expect(responseToken.status()).toBe(201);
-    const token = responseToken.headers()['x-challenger'];
-    
+   
     // Отправляем POST запрос с лишним полем priority
     const response = await request.post(`${testinfo.project.use.baseURL}/todos`, {
       headers: {
@@ -285,9 +314,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 
   test("16 PUT /todos/{id} (400) - attempt to create with PUT", { tag: '@API @PUT @validation' }, async ({ request }, testinfo) => {
     
-    const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-    expect(responseToken.status()).toBe(201);
-    const token = responseToken.headers()['x-challenger'];
     
     // Используем несуществующий ID для попытки создания
     const nonExistentId = 999999;
@@ -315,10 +341,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
   });
 
   test("17 POST /todos/{id} (200) - partial update", { tag: '@API @POST @functional' }, async ({ request }, testinfo) => {
-  
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Сначала создаем новую задачу, чтобы получить ID
   const createTodo = new toDoBuilder()
@@ -365,10 +387,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 
   test("18 POST /todos/{id} (404) - update non-existent todo", { tag: '@API @POST @error_handling' }, async ({ request }, testinfo) => {
   
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
-  
   // Используем несуществующий ID для попытки обновления
   const nonExistentId = 999999;
   
@@ -393,9 +411,6 @@ test("05 GET /todos/{id} (200) - получить todo по id", { tag: '@API @G
 });
  
 test("19 PUT /todos/{id} full (200) - full update", { tag: '@API @PUT @functional' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Сначала создаем новую задачу, чтобы получить ID
   const createTodo = new toDoBuilder()
@@ -443,9 +458,6 @@ test("19 PUT /todos/{id} full (200) - full update", { tag: '@API @PUT @functiona
 });
 
 test("20 PUT /todos/{id} partial (400) - no title field", { tag: '@API @PUT @validation' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Сначала создаем новую задачу, чтобы получить ID
   const createTodo = new toDoBuilder()
@@ -489,9 +501,6 @@ test("20 PUT /todos/{id} partial (400) - no title field", { tag: '@API @PUT @val
 });
 
 test("23 DELETE /todos/{id} (200) - delete todo", { tag: '@API @DELETE @functional' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Сначала создаем новую задачу, чтобы получить ID
   const createTodo = new toDoBuilder()
@@ -533,14 +542,21 @@ test("23 DELETE /todos/{id} (200) - delete todo", { tag: '@API @DELETE @function
 });
 
 test("25 GET /todos (200) XML - получить список todos задач в формате XML", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
-  const todosService = new TodosService(request);
-  const response = await todosService.getAll(token, testInfo, "application/xml");
+  // Выполняем GET запрос с заголовком Accept: application/xml
+  const response = await request.get(`${testInfo.project.use.baseURL}/todos`, {
+    headers: {
+      "X-CHALLENGER": token,
+      "Accept": "application/xml"
+    },
+  });
+  
+  // Проверяем статус 200
   expect(response.status()).toBe(200);
-
+  
   // Проверяем заголовок Content-Type
   const contentType = response.headers()["content-type"];
   expect(contentType).toContain("application/xml");
-
+  
   // Проверяем, что тело ответа содержит XML данные
   const responseBody = await response.text();
   expect(responseBody).toContain("<todos>");
@@ -551,9 +567,6 @@ test("25 GET /todos (200) XML - получить список todos задач �
 });
 
 test("26 GET /todos (200) JSON - get todos in JSON format", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
-  const responseToken = await request.post(`${testInfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Выполняем GET запрос с заголовком Accept: application/json
   const response = await request.get(`${testInfo.project.use.baseURL}/todos`, {
@@ -581,10 +594,7 @@ test("26 GET /todos (200) JSON - get todos in JSON format", { tag: '@API @GET @f
 });
 
 test("27 GET /todos (200) ANY - get todos in default format", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
-  const responseToken = await request.post(`${testInfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
-  
+
   // Выполняем GET запрос с заголовком Accept: */* (дефолтный формат)
   const response = await request.get(`${testInfo.project.use.baseURL}/todos`, {
     headers: {
@@ -611,9 +621,6 @@ test("27 GET /todos (200) ANY - get todos in default format", { tag: '@API @GET 
 });
 
 test("28 GET /todos (200) XML pref - get todos in XML format with preference", { tag: '@API @GET @functional' }, async ({ request }, testInfo) => {
-  const responseToken = await request.post(`${testInfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Выполняем GET запрос с заголовком Accept: application/xml,application/json (предпочтение XML)
   const response = await request.get(`${testInfo.project.use.baseURL}/todos`, {
@@ -642,9 +649,6 @@ test("28 GET /todos (200) XML pref - get todos in XML format with preference", {
 });
 
 test("31 POST /todos XML - create todo in XML format", { tag: '@API @POST @functional' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // XML payload для создания задачи
   const xmlPayload = `<todo>
@@ -726,9 +730,6 @@ test("32 POST /todos JSON - create todo in JSON format", { tag: '@API @POST @fun
 });
 
 test("33 POST /todos (415) - unsupported media type", { tag: '@API @POST @error_handling' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Отправляем POST запрос с неподдерживаемым content-type
   const response = await request.post(`${testinfo.project.use.baseURL}/todos`, {
@@ -745,9 +746,6 @@ test("33 POST /todos (415) - unsupported media type", { tag: '@API @POST @error_
 });
 
 test("41DELETE /heartbeat (405) - DELETE request returns 405", { tag: '@API @DELETE @error_handling' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Отправляем DELETE запрос на heartbeat endpoint
   const response = await request.delete(`${testinfo.project.use.baseURL}/heartbeat`, {
@@ -762,10 +760,7 @@ test("41DELETE /heartbeat (405) - DELETE request returns 405", { tag: '@API @DEL
 });
 
 test("42PATCH /heartbeat (500) - PATCH request returns 500", { tag: '@API @PATCH @error_handling' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
-  
+
   // Отправляем PATCH запрос на heartbeat endpoint
   const response = await request.patch(`${testinfo.project.use.baseURL}/heartbeat`, {
     headers: {
@@ -779,9 +774,6 @@ test("42PATCH /heartbeat (500) - PATCH request returns 500", { tag: '@API @PATCH
 });
 
 test("44GET /heartbeat (204) - GET request returns 204", { tag: '@API @GET @functional' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Отправляем GET запрос на heartbeat endpoint
   const response = await request.get(`${testinfo.project.use.baseURL}/heartbeat`, {
@@ -800,9 +792,6 @@ test("44GET /heartbeat (204) - GET request returns 204", { tag: '@API @GET @func
 });
 
 test("58 DELETE /todos/{id} (200) all - delete all todos", { tag: '@API @DELETE @functional' }, async ({ request }, testinfo) => {
-  const responseToken = await request.post(`${testinfo.project.use.baseURL}/challenger`);
-  expect(responseToken.status()).toBe(201);
-  const token = responseToken.headers()['x-challenger'];
   
   // Получаем список всех задач
   const getAllResponse = await request.get(`${testinfo.project.use.baseURL}/todos`, {
